@@ -67,6 +67,7 @@ pub enum Error {
     CrcMismatch(u16, u16),
     NotInitialized,
     WriteError,
+    InvalidBufferSize,
 }
 
 /// Must be called between powerup and [SdSpi::init] to ensure the sdcard is properly initialized.
@@ -218,6 +219,9 @@ where
         data: &mut [Aligned<ALIGN, [u8; SIZE]>],
     ) -> Result<(), Error> {
         let r = async {
+            if SIZE != 512 {
+                return Err(Error::InvalidBufferSize);
+            }
             if data.len() == 1 {
                 self.cmd(read_single_block(block_address)).await?;
                 self.read_data(&mut data[0][..]).await?;
@@ -243,6 +247,9 @@ where
         data: &[Aligned<ALIGN, [u8; SIZE]>],
     ) -> Result<(), Error> {
         let r = async {
+            if SIZE != 512 {
+                return Err(Error::InvalidBufferSize);
+            }
             if data.len() == 1 {
                 self.cmd(write_single_block(block_address)).await?;
                 self.write_data(DATA_START_BLOCK, &data[0][..]).await?;
@@ -288,31 +295,76 @@ where
     }
 
     async fn read_data(&mut self, buffer: &mut [u8]) -> Result<(), Error> {
-        let r = with_timeout(self.delay.clone(), 1000, async {
-            let mut byte = 0xFF;
-            while byte == 0xFF {
-                byte = self.read_byte().await?;
-            }
-            Ok(byte)
-        })
-        .await??;
+        let block_len = buffer.len();
+        
+        let mut found_token = None;
+        let mut extra_bytes = 0;
+        let mut temp_chunk = [0xFFu8; 8];
+        
+        // Polling loop: read 8-byte chunks until we find the start token
+        let timeout_res = with_timeout(self.delay.clone(), 1000, async {
+            loop {
+                temp_chunk.fill(0xFF);
+                self.spi
+                    .transfer_in_place(&mut temp_chunk)
+                    .await
+                    .map_err(|_| Error::SpiError)?;
 
-        if r != DATA_START_BLOCK {
-            return Err(Error::RegisterError(r));
+                for (idx, &b) in temp_chunk.iter().enumerate() {
+                    if b != 0xFF {
+                        found_token = Some(b);
+                        extra_bytes = temp_chunk.len() - 1 - idx;
+                        // Copy extra bytes to buffer (they are part of the data block)
+                        if extra_bytes > 0 {
+                            if extra_bytes > buffer.len() {
+                                return Err(Error::InvalidBufferSize);
+                            }
+                            buffer[0..extra_bytes].copy_from_slice(&temp_chunk[idx + 1..]);
+                        }
+                        break;
+                    }
+                }
+                if found_token.is_some() {
+                    return Ok(());
+                }
+            }
+        })
+        .await;
+
+        match timeout_res {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(e),
         }
 
-        buffer.fill(0xFF);
+        let token = found_token.unwrap();
+        if token != DATA_START_BLOCK {
+            return Err(Error::RegisterError(token));
+        }
+
+        // Read the remaining data bytes + 2 CRC bytes
+        if block_len < extra_bytes {
+            return Err(Error::InvalidBufferSize);
+        }
+        let remaining_data_len = block_len - extra_bytes;
+        let read_len = remaining_data_len + 2;
+        
+        let mut remain_temp = [0xFFu8; 514];
+        if read_len > remain_temp.len() {
+            return Err(Error::InvalidBufferSize);
+        }
         self.spi
-            .transfer_in_place(buffer)
+            .transfer_in_place(&mut remain_temp[0..read_len])
             .await
             .map_err(|_| Error::SpiError)?;
 
-        let mut crc_bytes = [0xFF; 2];
-        self.spi
-            .transfer_in_place(&mut crc_bytes)
-            .await
-            .map_err(|_| Error::SpiError)?;
-        let crc = u16::from_be_bytes(crc_bytes);
+        buffer[extra_bytes..block_len].copy_from_slice(&remain_temp[0..remaining_data_len]);
+
+        let crc = u16::from_be_bytes([
+            remain_temp[read_len - 2],
+            remain_temp[read_len - 1],
+        ]);
+        
         let calc_crc = crc16(buffer);
         if crc != calc_crc {
             return Err(Error::CrcMismatch(crc, calc_crc));

@@ -80,7 +80,7 @@ async fn main(_spawner: Spawner) {
     }
 
     let spid = ExclusiveDevice::new(spi, cs, embassy_time::Delay).unwrap();
-    let mut sd = SdSpi::<_, _, aligned::A1>::new(spid, embassy_time::Delay);
+    let mut sd = SdSpi::<_, _, aligned::A1>::new(spid, embassy_time::Delay, true);
 
     loop {
         if sd.init().await.is_ok() {

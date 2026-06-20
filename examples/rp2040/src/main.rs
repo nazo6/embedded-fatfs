@@ -59,7 +59,7 @@ async fn main(_spawner: Spawner) {
     let spi_bus = SPI_BUS.init(Mutex::new(spi));
 
     let spid = SpiDeviceWithConfig::new(spi_bus, cs, config);
-    let mut sd = SdSpi::<_, _, aligned::A1>::new(spid, embassy_time::Delay);
+    let mut sd = SdSpi::<_, _, aligned::A1>::new(spid, embassy_time::Delay, true);
 
     loop {
         // Initialize the card

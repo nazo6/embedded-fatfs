@@ -92,6 +92,7 @@ where
     spi: SPI,
     delay: D,
     card: Option<Card>,
+    crc: bool,
     _align: PhantomData<ALIGN>,
 }
 
@@ -101,11 +102,12 @@ where
     D: embedded_hal_async::delay::DelayNs + Clone,
     ALIGN: aligned::Alignment,
 {
-    pub fn new(spi: SPI, delay: D) -> Self {
+    pub fn new(spi: SPI, delay: D, crc: bool) -> Self {
         Self {
             spi,
             delay,
             card: None,
+            crc,
             _align: PhantomData,
         }
     }
@@ -125,7 +127,8 @@ where
 
             // "The SPI interface is initialized in the CRC OFF mode in default"
             // -- SD Part 1 Physical Layer Specification v9.00, Section 7.2.2 Bus Transfer Protection
-            if self.cmd(cmd::<R1>(0x3B, 1)).await? != R1_IDLE_STATE {
+            let crc_arg = if self.crc { 1 } else { 0 };
+            if self.cmd(cmd::<R1>(0x3B, crc_arg)).await? != R1_IDLE_STATE {
                 return Err(Error::Cmd59Error);
             }
 
@@ -201,6 +204,9 @@ where
             self.read_data(&mut cid).await?;
             card.cid = u128::from_be_bytes(cid).into();
 
+            #[cfg(feature = "defmt")]
+            trace!("Card initialized: {:?}", defmt::Debug2Format(&card));
+            #[cfg(not(feature = "defmt"))]
             trace!("Card initialized: {:?}", card);
             debug!("Found card with size: {}bytes", card.size());
 
@@ -360,14 +366,15 @@ where
 
         buffer[extra_bytes..block_len].copy_from_slice(&remain_temp[0..remaining_data_len]);
 
-        let crc = u16::from_be_bytes([
-            remain_temp[read_len - 2],
-            remain_temp[read_len - 1],
-        ]);
-        
-        let calc_crc = crc16(buffer);
-        if crc != calc_crc {
-            return Err(Error::CrcMismatch(crc, calc_crc));
+        if self.crc {
+            let crc = u16::from_be_bytes([
+                remain_temp[read_len - 2],
+                remain_temp[read_len - 1],
+            ]);
+            let calc_crc = crc16(buffer);
+            if crc != calc_crc {
+                return Err(Error::CrcMismatch(crc, calc_crc));
+            }
         }
 
         Ok(())
@@ -379,7 +386,11 @@ where
             .await
             .map_err(|_| Error::SpiError)?;
         self.spi.write(buffer).await.map_err(|_| Error::SpiError)?;
-        let crc_bytes = crc16(buffer).to_be_bytes();
+        let crc_bytes = if self.crc {
+            crc16(buffer).to_be_bytes()
+        } else {
+            [0xFF, 0xFF]
+        };
         self.spi
             .write(&crc_bytes)
             .await

@@ -123,15 +123,20 @@ impl<T: BlockDevice<SIZE>, const SIZE: usize> Read for BufStream<T, SIZE> {
         let mut total = 0;
         let target = buf.len();
         loop {
-            let bytes_read = if buf.len() % SIZE == 0
+            let bytes_read = if self.current_offset % SIZE as u64 == 0
                 && buf.as_ptr().cast::<u8>() as usize % Self::ALIGN == 0
-                && self.current_offset % SIZE as u64 == 0
+                && buf.len() >= SIZE
             {
-                // If the provided buffer has a suitable length and alignment _and_ the read head is on a block boundary, use it directly
+                let blocks = buf.len() / SIZE;
+                let direct_len = blocks * SIZE;
+                let (direct_buf, remaining_buf) = buf.split_at_mut(direct_len);
                 let block = self.pointer_block_start();
-                self.inner.read(block, slice_to_blocks_mut(buf)).await?;
+                self.inner
+                    .read(block, slice_to_blocks_mut(direct_buf))
+                    .await?;
 
-                buf.len()
+                buf = remaining_buf;
+                direct_len
             } else {
                 let block_start = self.pointer_block_start_addr();
                 let block_end = block_start + SIZE as u64;
@@ -172,15 +177,18 @@ impl<T: BlockDevice<SIZE>, const SIZE: usize> Write for BufStream<T, SIZE> {
         let mut total = 0;
         let target = buf.len();
         loop {
-            let bytes_written = if buf.len() % SIZE == 0
+            let bytes_written = if self.current_offset % SIZE as u64 == 0
                 && buf.as_ptr().cast::<u8>() as usize % Self::ALIGN == 0
-                && self.current_offset % SIZE as u64 == 0
+                && buf.len() >= SIZE
             {
-                // If the provided buffer has a suitable length and alignment _and_ the write head is on a block boundary, use it directly
+                let blocks = buf.len() / SIZE;
+                let direct_len = blocks * SIZE;
+                let (direct_buf, remaining_buf) = buf.split_at(direct_len);
                 let block = self.pointer_block_start();
-                self.inner.write(block, slice_to_blocks(buf)).await?;
+                self.inner.write(block, slice_to_blocks(direct_buf)).await?;
 
-                buf.len()
+                buf = remaining_buf;
+                direct_len
             } else {
                 let block_start = self.pointer_block_start_addr();
                 let block_end = block_start + SIZE as u64;

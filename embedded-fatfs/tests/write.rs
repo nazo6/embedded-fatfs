@@ -532,3 +532,34 @@ async fn read_to_end<IO: embedded_io_async::Read>(io: &mut IO) -> Result<Vec<u8>
 
     Ok(buf)
 }
+
+async fn test_write_burst(fs: FileSystem) {
+    let root_dir = fs.root_dir();
+    let mut file = root_dir.create_file("burst.txt").await.expect("create file");
+    
+    // Write 32KB of data (which is exactly our MAX_BURST_SIZE)
+    let data = vec![0xABu8; 32768];
+    file.write_all(&data).await.unwrap();
+    file.flush().await.unwrap();
+    
+    // Seek back and read it all using read_to_end
+    file.seek(SeekFrom::Start(0)).await.unwrap();
+    let buf = read_to_end(&mut file).await.unwrap();
+    assert_eq!(buf.len(), 32768);
+    assert!(buf.iter().all(|&b| b == 0xAB));
+}
+
+#[tokio::test]
+async fn test_write_burst_fat12() {
+    call_with_fs(test_write_burst, FAT12_IMG, 9).await
+}
+
+#[tokio::test]
+async fn test_write_burst_fat16() {
+    call_with_fs(test_write_burst, FAT16_IMG, 9).await
+}
+
+#[tokio::test]
+async fn test_write_burst_fat32() {
+    call_with_fs(test_write_burst, FAT32_IMG, 9).await
+}

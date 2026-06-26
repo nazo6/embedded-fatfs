@@ -28,7 +28,7 @@ mod error;
 mod parse;
 
 pub use entry::{
-    Chs, PartitionEntry, PartitionType, MBR_SIZE, PARTITION_COUNT, PARTITION_ENTRY_SIZE,
+    Chs, MBR_SIZE, PARTITION_COUNT, PARTITION_ENTRY_SIZE, PartitionEntry, PartitionType,
     SECTOR_SIZE,
 };
 pub use error::Error;

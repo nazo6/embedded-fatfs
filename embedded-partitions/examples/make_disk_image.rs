@@ -18,11 +18,11 @@
 use std::env;
 use std::path::PathBuf;
 
-use embedded_fatfs::{format_volume, FileSystem, FormatVolumeOptions, FsOptions};
+use embedded_fatfs::{FileSystem, FormatVolumeOptions, FsOptions, format_volume};
 use embedded_io_adapters::tokio_1::FromTokio;
 use embedded_io_async::{Seek, SeekFrom, Write};
 use embedded_partitions::mbr::{
-    Chs, Mbr, PartitionEntry, PartitionType, MBR_SIZE, PARTITION_ENTRY_SIZE, SECTOR_SIZE,
+    Chs, MBR_SIZE, Mbr, PARTITION_ENTRY_SIZE, PartitionEntry, PartitionType, SECTOR_SIZE,
 };
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;

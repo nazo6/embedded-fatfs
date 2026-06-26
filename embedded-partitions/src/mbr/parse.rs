@@ -4,7 +4,7 @@ use block_device_adapters::{StreamSlice, StreamSliceError};
 use embedded_io_async::{Read, Seek, Write};
 
 use crate::mbr::entry::{
-    PartitionEntry, MBR_SIZE, PARTITION_COUNT, PARTITION_ENTRY_SIZE, SECTOR_SIZE,
+    MBR_SIZE, PARTITION_COUNT, PARTITION_ENTRY_SIZE, PartitionEntry, SECTOR_SIZE,
 };
 use crate::mbr::error::Error;
 

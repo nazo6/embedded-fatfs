@@ -302,11 +302,11 @@ where
 
     async fn read_data(&mut self, buffer: &mut [u8]) -> Result<(), Error> {
         let block_len = buffer.len();
-        
+
         let mut found_token = None;
         let mut extra_bytes = 0;
         let mut temp_chunk = [0xFFu8; 8];
-        
+
         // Polling loop: read 8-byte chunks until we find the start token
         let timeout_res = with_timeout(self.delay.clone(), 1000, async {
             loop {
@@ -354,7 +354,7 @@ where
         }
         let remaining_data_len = block_len - extra_bytes;
         let read_len = remaining_data_len + 2;
-        
+
         let mut remain_temp = [0xFFu8; 514];
         if read_len > remain_temp.len() {
             return Err(Error::InvalidBufferSize);
@@ -367,10 +367,7 @@ where
         buffer[extra_bytes..block_len].copy_from_slice(&remain_temp[0..remaining_data_len]);
 
         if self.crc {
-            let crc = u16::from_be_bytes([
-                remain_temp[read_len - 2],
-                remain_temp[read_len - 1],
-            ]);
+            let crc = u16::from_be_bytes([remain_temp[read_len - 2], remain_temp[read_len - 1]]);
             let calc_crc = crc16(buffer);
             if crc != calc_crc {
                 return Err(Error::CrcMismatch(crc, calc_crc));

@@ -125,7 +125,10 @@ impl PartitionType {
     /// This crate does not walk the EBR chain; logical partitions
     /// inside an extended partition must be enumerated manually.
     pub const fn is_extended(self) -> bool {
-        matches!(self, PartitionType::ExtendedChs | PartitionType::ExtendedLba)
+        matches!(
+            self,
+            PartitionType::ExtendedChs | PartitionType::ExtendedLba
+        )
     }
 
     /// Returns true for the [`Empty`](Self::Empty) variant (`0x00`).

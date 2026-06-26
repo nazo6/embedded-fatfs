@@ -16,9 +16,7 @@ use tokio::fs::OpenOptions;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let path = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "disk.img".to_string());
+    let path = env::args().nth(1).unwrap_or_else(|| "disk.img".to_string());
 
     let file = OpenOptions::new()
         .read(true)

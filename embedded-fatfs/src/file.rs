@@ -328,13 +328,15 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Read for File<'_, IO, TP, OCC> {
             None => return Ok(0),
         };
         let offset_in_cluster = self.context.offset % cluster_size;
-        
+
         let mut contiguous_clusters_count = 1;
         if offset_in_cluster == 0 && buf.len() > cluster_size as usize {
             let max_burst_clusters = MAX_BURST_SIZE / cluster_size as usize;
             let mut last_cluster = current_cluster;
             let mut iter = self.fs.cluster_iter(current_cluster);
-            while contiguous_clusters_count < max_burst_clusters && (contiguous_clusters_count * cluster_size as usize) < buf.len() {
+            while contiguous_clusters_count < max_burst_clusters
+                && (contiguous_clusters_count * cluster_size as usize) < buf.len()
+            {
                 match iter.next().await {
                     Some(Ok(next_cluster)) if next_cluster == last_cluster + 1 => {
                         contiguous_clusters_count += 1;
@@ -355,7 +357,12 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Read for File<'_, IO, TP, OCC> {
         if read_size == 0 {
             return Ok(0);
         }
-        trace!("read {} bytes in cluster {} (contiguous: {})", read_size, current_cluster, contiguous_clusters_count);
+        trace!(
+            "read {} bytes in cluster {} (contiguous: {})",
+            read_size,
+            current_cluster,
+            contiguous_clusters_count
+        );
         let offset_in_fs = self.fs.offset_from_cluster(current_cluster) + u64::from(offset_in_cluster);
         let read_bytes = {
             let mut disk = self.fs.disk.borrow_mut();
@@ -366,7 +373,8 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Read for File<'_, IO, TP, OCC> {
             return Ok(0);
         }
         self.context.offset += read_bytes as u32;
-        self.context.current_cluster = Some(current_cluster + ((read_bytes + offset_in_cluster as usize - 1) / cluster_size as usize) as u32);
+        self.context.current_cluster =
+            Some(current_cluster + ((read_bytes + offset_in_cluster as usize - 1) / cluster_size as usize) as u32);
 
         if let Some(ref mut e) = self.context.entry {
             if self.fs.options.update_accessed_date {
@@ -392,9 +400,9 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Write for File<'_, IO, TP, OCC> {
 
         // Mark the volume 'dirty'
         self.fs.set_dirty_flag(true).await?;
-        
+
         let offset_in_cluster = self.context.offset % cluster_size;
-        
+
         // Get first cluster for this write operation
         let current_cluster = if offset_in_cluster == 0 {
             // next cluster
@@ -449,10 +457,7 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Write for File<'_, IO, TP, OCC> {
                     n
                 } else {
                     // end of chain reached - allocate new cluster
-                    let new_cluster = self
-                        .fs
-                        .alloc_cluster(Some(active_cluster), self.is_dir())
-                        .await?;
+                    let new_cluster = self.fs.alloc_cluster(Some(active_cluster), self.is_dir()).await?;
                     trace!("allocated contiguous candidate cluster {}", new_cluster);
                     if self.context.first_cluster.is_none() {
                         self.set_first_cluster(new_cluster);
@@ -476,8 +481,13 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Write for File<'_, IO, TP, OCC> {
         };
         let write_size = cmp::min(buf.len(), limit_size);
         let write_size = cmp::min(write_size, bytes_left_until_max_file_size);
-        
-        trace!("write {} bytes in cluster {} (contiguous: {})", write_size, current_cluster, contiguous_count);
+
+        trace!(
+            "write {} bytes in cluster {} (contiguous: {})",
+            write_size,
+            current_cluster,
+            contiguous_count
+        );
         let offset_in_fs = self.fs.offset_from_cluster(current_cluster) + u64::from(offset_in_cluster);
         let written_bytes = {
             let mut disk = self.fs.disk.borrow_mut();
@@ -487,9 +497,10 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Write for File<'_, IO, TP, OCC> {
         if written_bytes == 0 {
             return Ok(0);
         }
-        
+
         self.context.offset += written_bytes as u32;
-        self.context.current_cluster = Some(current_cluster + ((written_bytes + offset_in_cluster as usize - 1) / cluster_size as usize) as u32);
+        self.context.current_cluster =
+            Some(current_cluster + ((written_bytes + offset_in_cluster as usize - 1) / cluster_size as usize) as u32);
         self.update_dir_entry_after_write();
         Ok(written_bytes)
     }

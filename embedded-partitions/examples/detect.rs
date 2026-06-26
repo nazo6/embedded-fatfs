@@ -37,9 +37,7 @@ use tokio::fs::OpenOptions;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let path = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "disk.img".to_string());
+    let path = env::args().nth(1).unwrap_or_else(|| "disk.img".to_string());
 
     let file = OpenOptions::new()
         .read(true)
@@ -83,9 +81,7 @@ async fn main() -> anyhow::Result<()> {
             list_fat_root(io).await?;
         }
         Scheme::Unknown(_) => {
-            anyhow::bail!(
-                "unrecognised layout — first sector is neither an MBR nor a FAT BPB",
-            );
+            anyhow::bail!("unrecognised layout — first sector is neither an MBR nor a FAT BPB",);
         }
     }
 

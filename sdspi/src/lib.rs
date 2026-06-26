@@ -121,6 +121,7 @@ where
                     if r == R1_IDLE_STATE {
                         return Ok(());
                     }
+                    self.delay.delay_ms(1).await;
                 }
             })
             .await??;
@@ -133,7 +134,7 @@ where
             }
 
             with_timeout(self.delay.clone(), 1000, async {
-                loop {
+                for _ in 0..100 {
                     let r = self.cmd(send_if_cond(0x1, 0xAA)).await?;
                     if r == (R1_ILLEGAL_COMMAND | R1_IDLE_STATE) {
                         return Err(Error::UnsupportedCard);
@@ -147,6 +148,7 @@ where
                         return Ok(());
                     }
                 }
+                Err(Error::Timeout)
             })
             .await??;
 
@@ -162,6 +164,7 @@ where
                     if r == R1_READY_STATE {
                         return Ok(());
                     }
+                    self.delay.delay_ms(10).await;
                 }
             })
             .await??;
@@ -182,6 +185,7 @@ where
                     if !ocr.is_busy() {
                         return Ok(ocr);
                     }
+                    self.delay.delay_ms(10).await;
                 }
             })
             .await??;
@@ -309,7 +313,7 @@ where
 
         // Polling loop: read 8-byte chunks until we find the start token
         let timeout_res = with_timeout(self.delay.clone(), 1000, async {
-            loop {
+            for _ in 0..2000 {
                 temp_chunk.fill(0xFF);
                 self.spi
                     .transfer_in_place(&mut temp_chunk)
@@ -334,6 +338,7 @@ where
                     return Ok(());
                 }
             }
+            Err(Error::Timeout)
         })
         .await;
 
@@ -431,12 +436,13 @@ where
         }
 
         let byte = with_timeout(self.delay.clone(), 1000, async {
-            loop {
+            for _ in 0..2000 {
                 let byte = self.read_byte().await?;
                 if byte & 0x80 == 0 {
                     return Ok(byte);
                 }
             }
+            Err(Error::Timeout)
         })
         .await??;
 
@@ -451,8 +457,12 @@ where
 
     async fn wait_idle(&mut self) -> Result<(), Error> {
         with_timeout(self.delay.clone(), 5000, async {
-            while self.read_byte().await? != 0xFF {}
-            Ok(())
+            for _ in 0..10000 {
+                if self.read_byte().await? == 0xFF {
+                    return Ok(());
+                }
+            }
+            Err(Error::Timeout)
         })
         .await?
     }
